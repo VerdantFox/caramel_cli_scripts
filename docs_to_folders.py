@@ -52,6 +52,7 @@ def sample_folders(port, user_name, password, host, cases, doc_count):
 				get_request = requests.get(url=get_url, auth=auth,
 				                           params={'facets': 'doc.id(count;limit=10000000)&maxhits=0'})
 				current_doc_count = int(etree.fromstring(get_request.text).findall('.//count')[0].text)
+				# print(current_doc_count)
 				docs_to_add = 0
 				if current_doc_count < doc_count:
 					docs_to_add = doc_count - current_doc_count
@@ -62,7 +63,6 @@ def sample_folders(port, user_name, password, host, cases, doc_count):
 					data = '_method=sample&target_count={docs_to_add}'.format(docs_to_add=docs_to_add)
 					post_request = requests.post(url=post_url, auth=auth, headers=headers, data=data)
 
-				# print(int(etree.fromstring(get_request.text).findall('.//count')[0].text))
 
 
 if __name__ == '__main__':
