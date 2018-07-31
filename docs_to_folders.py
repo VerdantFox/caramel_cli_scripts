@@ -10,18 +10,19 @@ with open('secure.txt', 'r') as f:
 			key, value = line.strip('\n').split(':')
 			secure[key] = value
 
-options_string = '[-c <case names (comma separated if multiple)>] [-n <number of documents>] [-h <host name>]'
+options_string = '[-c <case names (comma separated if multiple)>] [-d <number of documents>] [-h <host name>]' \
+                 '[-p <port number>] [-u <user name>] [-w <password>]'
 
 
 @click.command(options_metavar=options_string)
+@click.option('-c', '--cases', required=True, metavar='<case names (comma separated if multiple)>')
+@click.option('-d', '--doc-count', required=True, metavar='<docs per folder>')
+@click.option('-h', '--host', required=True, envvar='CARAMEL_HOST', metavar='<host name>')
 @click.option('-p', '--port', default=secure['port'], envvar='CARAMEL_PORT', metavar='<port number>')
 @click.option('-u', '--user-name', default=secure['username'], envvar='CARAMEL_USERNAME', metavar='<user name>')
 @click.option('-w', '--password', default=secure['password'], envvar='CARAMEL_PASSWORD', metavar='<password>')
-@click.option('-h', '--host', required=True, envvar='CARAMEL_HOST', metavar='<host name>')
-@click.option('-c', '--cases', required=True, metavar='<case names (comma separated if multiple)>')
-@click.option('-d', '--doc-count', required=True, metavar='<docs per folder>')
 def sample_folders(port, user_name, password, host, cases, doc_count):
-	"""Adds specified number of random documents from cases to folders using Caramel 'sample" method"""
+	"""Adds specified number of random documents from cases to folders using Caramel 'sample' method"""
 	auth = (user_name, password)
 	try:
 		doc_count = int(doc_count)
@@ -38,8 +39,16 @@ def sample_folders(port, user_name, password, host, cases, doc_count):
 	for case in cases:
 		folder_feed = 'http://{host}:{port}/case/{case}/folder'.format(host=host, port=port, case=case)
 		r = requests.get(folder_feed, auth=auth, params={'maxhits': '10000'})
-		if r.status_code == 404:
+		if r.status_code == 200:
+			pass  # Success
+		elif r.status_code == 404:
 			raise click.BadParameter("Case '{}' could not be found. Check case name's spelling.".format(case))
+		elif r.status_code == 401:
+			raise click.BadParameter("Unauthorized -- invalid login credentials. Check username and password.")
+		else:
+			raise click.BadParameter("Something went wrong. \nGot the following status code: '{code}'. "
+			                         "\nThe following headers were produced: '{headers}'".format(
+														code=r.status_code, headers=r.headers))
 		folder_count = len(etree.fromstring(r.text).findall('.//folder'))
 		click.echo("Working on '{case}': contains {folder_count} folders.".format(
 			case=case, folder_count=folder_count))
@@ -62,7 +71,6 @@ def sample_folders(port, user_name, password, host, cases, doc_count):
 					headers = {'content-type': 'application/x-www-form-urlencoded'}
 					data = '_method=sample&target_count={docs_to_add}'.format(docs_to_add=docs_to_add)
 					post_request = requests.post(url=post_url, auth=auth, headers=headers, data=data)
-
 
 
 if __name__ == '__main__':
