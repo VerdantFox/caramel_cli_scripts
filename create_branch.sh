@@ -5,7 +5,7 @@
 
 function print_usage
 {
-  echo "USAGE: $ create_branch -t <ticket number> -d <branch description> "
+  echo "USAGE: $ create_branch -t <ticket number> -d \"<quoted branch description>\""
 }
 
 
@@ -48,16 +48,29 @@ if [[ -z ${DESCRIPTION} ]]; then
 fi
 BRANCH_NAME="twilliams-CRML-${TICKET_NUMBER}-${DESCRIPTION}"
 
+if [[ -z $1 ]]; then
+    : # Got no extra args as expected
+else
+    echo "Got extra arguments. Is your description in quotes?"
+    echo "description given: ${DESCRIPTION}"
+    echo print_usage; exit 1
+fi
 
 # get svn location
-source bash_variables.txt
-
+source /Users/twilliams/PycharmProjects/caramel_cli_scripts/bash_variables.txt
 
 # Do the things
 echo; echo "creating branch: ${BRANCH_NAME}"; echo
+echo "commands run are as follows..."
+echo "svn copy -m \"branching for CRML-${TICKET_NUMBER}\" ${SVN_LOC}/trunk ${SVN_LOC}/branches/${BRANCH_NAME}"
 svn copy -m "branching for CRML-${TICKET_NUMBER}" ${SVN_LOC}/trunk ${SVN_LOC}/branches/${BRANCH_NAME}
+echo "cd ~/projects/caramel-api/branches/"
 cd ~/projects/caramel-api/branches/
+echo "svn co ${SVN_LOC}/branches/${BRANCH_NAME}"
 svn co ${SVN_LOC}/branches/${BRANCH_NAME}
+echo "cd ${BRANCH_NAME}"
 cd ${BRANCH_NAME}
+echo "./bin/modules-symlink -c"
 ./bin/modules-symlink -c
+ech "charm ."
 charm .
