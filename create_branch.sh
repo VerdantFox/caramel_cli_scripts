@@ -9,7 +9,7 @@ function print_usage
 }
 
 
-# Grab variablees from command line
+# Grab variables from command line
 while getopts ":t:d:h" opt
 do
   case ${opt} in
