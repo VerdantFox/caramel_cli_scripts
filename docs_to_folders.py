@@ -2,6 +2,7 @@ from __future__ import print_function, division
 import requests
 import click
 from lxml import etree
+import time
 
 with open('secure.txt', 'r') as f:
 	secure = dict()
@@ -26,15 +27,16 @@ def sample_folders(port, user_name, password, host, cases, doc_count):
 	auth = (user_name, password)
 	try:
 		doc_count = int(doc_count)
-		if not 1 <= doc_count <= 10000:
-			raise click.BadParameter("doc_count must be a number between 1 and 10000")
+		if doc_count <= 0:
+			raise click.BadParameter("doc_count must be an integer greater than 0")
 	except ValueError:
-		raise click.BadParameter("doc_count must be a number between 1 and 10000")
+		raise click.BadParameter("doc_count must be an integer greater than 0")
 	cases = cases.strip(',').split(',')
 	click.echo("Host name: {}".format(host))
 	click.echo("Port number: {}".format(port))
 	click.echo("User name: {}".format(user_name))
-	click.echo("Plan to bring folders in case(s) to {doc_count} random documents".format(doc_count=doc_count))
+	click.echo("Plan to bring folders in case(s) to within 98% ({doc_98}) of {doc_count} random documents".format(
+		doc_98=int(doc_count * 0.98), doc_count=doc_count))
 
 	for case in cases:
 		folder_feed = 'http://{host}:{port}/case/{case}/folder'.format(host=host, port=port, case=case)
@@ -58,19 +60,41 @@ def sample_folders(port, user_name, password, host, cases, doc_count):
 				folder_id = folder.get('uri').split('/')[-1]
 				get_url = 'http://{host}:{port}/case/{case}/folder/{folder_id}/b'.format(
 					host=host, port=port, case=case, folder_id=folder_id)
-				get_request = requests.get(url=get_url, auth=auth,
-				                           params={'facets': 'doc.id(count;limit=10000000)&maxhits=0'})
-				current_doc_count = int(etree.fromstring(get_request.text).findall('.//count')[0].text)
-				# print(current_doc_count)
-				docs_to_add = 0
-				if current_doc_count < doc_count:
-					docs_to_add = doc_count - current_doc_count
-				if docs_to_add > 0:
-					post_url = 'http://{host}:{port}/case/{case}/folder/{folder}'.format(
-						host=host, port=port, case=case, folder=folder_id)
-					headers = {'content-type': 'application/x-www-form-urlencoded'}
-					data = '_method=sample&target_count={docs_to_add}'.format(docs_to_add=docs_to_add)
-					post_request = requests.post(url=post_url, auth=auth, headers=headers, data=data)
+
+				while_passes = 0
+				get_attempts = 0
+				previous_doc_count = None
+				while True:
+					get_request = requests.get(url=get_url, auth=auth,
+					                           params={'facets': 'doc.id(count;limit=10000000)&maxhits=0'})
+					current_doc_count = int(etree.fromstring(get_request.text).findall('.//count')[0].text)
+					get_attempts += 1
+					# Sometimes takes a few seconds after POST for database update to show in GET
+					if while_passes != 0 and get_attempts < 11:
+						if previous_doc_count == current_doc_count:
+							time.sleep(1)
+							continue
+					if current_doc_count < doc_count:
+						docs_to_add = doc_count - current_doc_count
+					else:
+						break
+					# Escape valve for not having to exactly hit doc count.
+					# Sometimes sample will choose docs for folder that were already there.
+					if (current_doc_count / doc_count) > 0.98:
+						break
+					if docs_to_add > 0:
+						if docs_to_add / 10000 <= 1:
+							add_docs = docs_to_add
+						else:
+							add_docs = 10000
+						post_url = 'http://{host}:{port}/case/{case}/folder/{folder}'.format(
+							host=host, port=port, case=case, folder=folder_id)
+						headers = {'content-type': 'application/x-www-form-urlencoded'}
+						data = '_method=sample&target_count={add_docs}'.format(add_docs=add_docs)
+						post_request = requests.post(url=post_url, auth=auth, headers=headers, data=data)
+						previous_doc_count = current_doc_count
+					get_attempts = 0
+					while_passes += 1
 
 
 if __name__ == '__main__':
