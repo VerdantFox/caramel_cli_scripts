@@ -94,22 +94,34 @@ def sample_folders(cases,  doc_count, host, port, user_name, password, thread_co
 def add_docs(auth, host, port, case, doc_count, folder, max_threads, purge):
     """Add specific number of documents to a folder in multi-threaded fashion"""
     folder_id = folder.get('uri').split('/')[-1]
+    get_url = 'http://{host}:{port}/case/{case}/folder/{folder_id}/b'.format(
+        host=host, port=port, case=case, folder_id=folder_id)
+    get_params = {'facets': 'doc.id(count;limit=10000000)', 'maxhits': '0'}
     purge_url = 'http://{host}:{port}/case/{case}/folder/{folder_id}'.format(
         host=host, port=port, case=case, folder_id=folder_id)
     purge_headers = {'content-type': 'application/x-www-form-urlencoded'}
     purge_data = {'_method': 'purge'}
+
     if purge:
         purge_request = requests.post(
             url=purge_url, auth=auth, headers=purge_headers, data=purge_data)
+        get_attempts = 0
+        current_doc_count = -1
+        while current_doc_count != 0:
+            get_attempts += 1
+            time.sleep(0.5)
+            get_request = requests.get(url=get_url, auth=auth,
+                                       params=get_params)
+            current_doc_count = int(etree.fromstring(get_request.text).findall('.//count')[0].text)
+            if get_attempts > 15:   # 8 seconds
+                break
 
-    get_url = 'http://{host}:{port}/case/{case}/folder/{folder_id}/b'.format(
-        host=host, port=port, case=case, folder_id=folder_id)
     while_passes = 0
     get_attempts = 0
     previous_doc_count = None
     while True:
         get_request = requests.get(url=get_url, auth=auth,
-                                   params={'facets': 'doc.id(count;limit=10000000)&maxhits=0'})
+                                   params=get_params)
         current_doc_count = int(etree.fromstring(get_request.text).findall('.//count')[0].text)
         get_attempts += 1
         # Sometimes takes a few seconds after POST for database update to show in GET
@@ -133,7 +145,7 @@ def add_docs(auth, host, port, case, doc_count, folder, max_threads, purge):
             post_url = 'http://{host}:{port}/case/{case}/folder/{folder}'.format(
                 host=host, port=port, case=case, folder=folder_id)
             headers = {'content-type': 'application/x-www-form-urlencoded'}
-            data = '_method=sample&target_count={add_docs}'.format(add_docs=add_docs)
+            data = {'_method': 'sample', 'target_count': add_docs}
             post_request = requests.post(url=post_url, auth=auth, headers=headers, data=data)
             previous_doc_count = current_doc_count
         get_attempts = 0
