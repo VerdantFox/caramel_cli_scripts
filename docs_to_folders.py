@@ -67,11 +67,11 @@ def sample_folders(cases,  doc_count, host, port, user_name, password, thread_co
             raise click.BadParameter("Something went wrong. \nGot the following status code: '{code}'. "
                                      "\nThe following headers were produced: '{headers}'".format(
                                                         code=r.status_code, headers=r.headers))
-        docs_url = 'http://{host}:{port}/case/{case}/document?'.format(
+        docs_url = 'http://{host}:{port}/case/{case}/document'.format(
             host=host, port=port, case=case)
         docs_params = {'uhits': '1', 'maxhits': '0'}
-        document_request = requests.get(url=docs_url, auth=glob_vars['auth'], params=docs_params)
-        case_doc_count = int(etree.fromstring(document_request.text).findall('.//unfiltered_hits')[0].text)
+        doc_resp = requests.get(url=docs_url, auth=glob_vars['auth'], params=docs_params)
+        case_doc_count = int(etree.fromstring(doc_resp.text).findall('.//unfiltered_hits')[0].text)
         folder_count = len(etree.fromstring(r.text).findall('.//folder'))
         click.echo("Working on '{case}':\n"
                    "\tcontains {case_doc_count} documents\n"
@@ -90,12 +90,12 @@ def sample_folders(cases,  doc_count, host, port, user_name, password, thread_co
                                label="Adding up to {} documents to each folder".format(doc_count)) as folders:
             for folder in folders:
                 glob_vars['max_threads'].acquire(blocking=True)
-                t = threading.Thread(target=add_docs,
+                t = threading.Thread(target=add_docs_to_folder,
                                      args=(case, folder))
                 t.start()
 
 
-def add_docs(case, folder):
+def add_docs_to_folder(case, folder):
     """Add specific number of documents to a folder in multi-threaded fashion"""
     folder_id = folder.get('uri').split('/')[-1]
     get_url = 'http://{host}:{port}/case/{case}/folder/{folder_id}/b'.format(
@@ -109,16 +109,16 @@ def add_docs(case, folder):
     if glob_vars['purge']:
         current_doc_count = get_doc_count(case, folder_id)
         if current_doc_count > glob_vars['doc_count']:
-            purge_request = requests.post(
+            purge_resp = requests.post(
                 url=purge_url, auth=glob_vars['auth'], headers=purge_headers, data=purge_data)
             get_attempts = 0
             while current_doc_count != 0:
                 get_attempts += 1
                 time.sleep(0.5)
-                get_request = requests.get(url=get_url, auth=glob_vars['auth'],
-                                           params=get_params)
+                get_resp = requests.get(url=get_url, auth=glob_vars['auth'],
+                                        params=get_params)
                 current_doc_count = int(etree.fromstring(
-                    get_request.text).findall('.//count')[0].text)
+                    get_resp.text).findall('.//count')[0].text)
                 if get_attempts > 24:   # 12 seconds
                     break
 
@@ -150,8 +150,8 @@ def add_docs(case, folder):
                 host=glob_vars['host'], port=glob_vars['port'], case=case, folder=folder_id)
             headers = {'content-type': 'application/x-www-form-urlencoded'}
             data = {'_method': 'sample', 'target_count': add_docs}
-            post_request = requests.post(url=post_url, auth=glob_vars['auth'],
-                                         headers=headers, data=data)
+            post_resp = requests.post(url=post_url, auth=glob_vars['auth'],
+                                      headers=headers, data=data)
             previous_doc_count = current_doc_count
         get_attempts = 0
         while_passes += 1
@@ -163,9 +163,9 @@ def get_doc_count(case, folder_id):
     get_url = 'http://{host}:{port}/case/{case}/folder/{folder_id}/b'.format(
         host=glob_vars['host'], port=glob_vars['port'], case=case, folder_id=folder_id)
     get_params = {'facets': 'doc.id(count;limit=10000000)', 'maxhits': '0'}
-    get_request = requests.get(url=get_url, auth=glob_vars['auth'],
-                               params=get_params)
-    current_doc_count = int(etree.fromstring(get_request.text).findall('.//count')[0].text)
+    get_resp = requests.get(url=get_url, auth=glob_vars['auth'],
+                            params=get_params)
+    current_doc_count = int(etree.fromstring(get_resp.text).findall('.//count')[0].text)
     return current_doc_count
 
 
