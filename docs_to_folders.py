@@ -1,3 +1,29 @@
+"""Add documents to cases' folders in multi-threaded fashion
+
+Add specified number of random documents to specified cases using caramel
+'sample' method. Recommend using ~30 total threads. I.e. if running 3 instances
+of this script (one per case) do run 10 threads each. 15 threads for 2 cases,
+30 threads for one case.
+
+Options/args:
+-c --cases CASES [required]
+    comma separated list of cases to check folder counts for
+    example case1,case2,case3,etc...
+-d --doc-count DOC_COUNT
+    document count desired in folders
+-h --host HOST[required]
+    server host to check folder counts for
+-p --port PORT
+    port for checking counts
+-u --user-name USERNAME
+    username for authentication
+-w --password PASSWORD
+    password for authentication
+-t --thread-count (flag)
+    number of threads used to add documents to folders
+--purge (flag)
+    will purge all documents from folders before adding new documents
+"""
 from __future__ import print_function, division
 import requests
 import click
@@ -15,18 +41,18 @@ with open('secure.txt', 'r') as f:
             secure[key] = value
 
 options_string = '[-c <case names (comma separated if multiple)>] [-d <number of documents>] [-h <host name>]' \
-                 '[-p <port number>] [-u <user name>] [-w <password>] [--purge]'
+                 '[-p <port number>] [-u <user name>] [-w <password>] [-t <threads>] [--purge]'
 glob_vars = {}
 
 
 @click.command(options_metavar=options_string)
 @click.option('-c', '--cases', required=True, metavar='<case names (comma separated if multiple)>')
-@click.option('-d', '--doc-count', required=True, metavar='<docs per folder>')
+@click.option('-d', '--doc-count', type=click.INT, required=True, metavar='<docs per folder>')
 @click.option('-h', '--host', required=True, envvar='CARAMEL_HOST', metavar='<host name>')
-@click.option('-p', '--port', default=secure['port'], envvar='CARAMEL_PORT', metavar='<port number>')
+@click.option('-p', '--port', type=click.INT, default=secure['port'], envvar='CARAMEL_PORT', metavar='<port number>')
 @click.option('-u', '--user-name', default=secure['username'], envvar='CARAMEL_USERNAME', metavar='<user name>')
 @click.option('-w', '--password', default=secure['password'], envvar='CARAMEL_PASSWORD', metavar='<password>')
-@click.option('-t', '--thread-count', default=10, metavar='<thread count>')
+@click.option('-t', '--thread-count', type=click.INT, default=10, metavar='<thread count>')
 @click.option('--purge', 'purge', is_flag=True)
 def sample_folders(cases,  doc_count, host, port, user_name, password, thread_count, purge):
     """Adds specified number of random documents from cases to folders using Caramel 'sample' method"""
@@ -34,13 +60,9 @@ def sample_folders(cases,  doc_count, host, port, user_name, password, thread_co
     glob_vars['host'] = host
     glob_vars['port'] = port
     glob_vars['purge'] = purge
-    try:
-        glob_vars['doc_count'] = int(doc_count)
-        if doc_count <= 0:
-            raise click.BadParameter("doc_count must be an integer greater than 0")
-    except ValueError:
+    glob_vars['doc_count'] = doc_count
+    if doc_count <= 0:
         raise click.BadParameter("doc_count must be an integer greater than 0")
-    thread_count = int(thread_count)
     if not 1 <= thread_count <= 100:
         raise click.BadParameter("thread count must be a number between 1 and 100")
 
@@ -49,7 +71,7 @@ def sample_folders(cases,  doc_count, host, port, user_name, password, thread_co
     click.echo("Port number: {}".format(port))
     click.echo("User name: {}".format(user_name))
     click.echo("Plan to bring folders in case(s) to within 98% ({doc_98}) of {doc_count} random documents".format(
-        doc_98=int(glob_vars['doc_count'] * 0.98), doc_count=glob_vars['doc_count']))
+        doc_98=glob_vars['doc_count'] * 0.98, doc_count=glob_vars['doc_count']))
 
     for case in cases:
         folder_feed = 'http://{host}:{port}/case/{case}/folder'.format(host=host, port=port, case=case)
@@ -160,6 +182,7 @@ def add_docs_to_folder(case, folder):
 
 
 def get_doc_count(case, folder_id):
+    """Get the number of documents in folder"""
     get_url = 'http://{host}:{port}/case/{case}/folder/{folder_id}/b'.format(
         host=glob_vars['host'], port=glob_vars['port'], case=case, folder_id=folder_id)
     get_params = {'facets': 'doc.id(count;limit=10000000)', 'maxhits': '0'}

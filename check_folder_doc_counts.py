@@ -1,3 +1,25 @@
+"""Lists document count of every folder in case.
+
+Can specify an expected doc count,
+in which case script will only display the document count of folders that are not
+within 3% of the expected document count. Useful for determining if docs_to_folders
+correctly added the specified number of documents to folders.
+
+Options/args:
+-c --cases CASES [required]
+    comma separated list of cases to check folder counts for
+    example case1,case2,case3,etc...
+-h --host HOST[required]
+    server host to check folder counts for
+-p --port PORT
+    port for checking counts
+-u --user-name USERNAME
+    username for authentication
+-w --password PASSWORD
+    password for authentication
+-d --doc-count DOC_COUNT
+    expected document count
+"""
 from __future__ import print_function, division
 import requests
 import click
@@ -17,10 +39,10 @@ options_string = '[-c <case names (comma separated if multiple)>] [-h <host name
 @click.command(options_metavar=options_string)
 @click.option('-c', '--cases', required=True, metavar='<case names (comma separated if multiple)>')
 @click.option('-h', '--host', required=True, envvar='CARAMEL_HOST', metavar='<host name>')
-@click.option('-p', '--port', default=secure['port'], envvar='CARAMEL_PORT', metavar='<port number>')
+@click.option('-p', '--port', type=click.INT, default=secure['port'], envvar='CARAMEL_PORT', metavar='<port number>')
 @click.option('-u', '--user-name', default=secure['username'], envvar='CARAMEL_USERNAME', metavar='<user name>')
 @click.option('-w', '--password', default=secure['password'], envvar='CARAMEL_PASSWORD', metavar='<password>')
-@click.option('-d', '--doc-count', default=None, metavar='<expected doc count>')
+@click.option('-d', '--doc-count', type=click.INT, default=None, metavar='<expected doc count>')
 def check_folders(port, user_name, password, host, cases, doc_count):
     """Checks folders' document counts"""
     auth = (user_name, password)
@@ -28,7 +50,6 @@ def check_folders(port, user_name, password, host, cases, doc_count):
     click.echo("Host name: {}".format(host))
     click.echo("Port number: {}".format(port))
     click.echo("User name: {}".format(user_name))
-    doc_count = int(doc_count)
 
     for case in cases:
         folder_feed = 'http://{host}:{port}/case/{case}/folder'.format(host=host, port=port, case=case)
